@@ -1,0 +1,11 @@
+*.zip
+*.cfg
+legislative_productivity/
+OLS_tables/
+OLS_tables_small_world/
+parsed/
+propublica_data/
+xmltodict-1.0.4/
+xmltodict.py
+.venv/
+__pycache__/
