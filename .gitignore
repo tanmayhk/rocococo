@@ -5,6 +5,8 @@ OLS_tables/
 OLS_tables_small_world/
 parsed/
 propublica_data/
+github_legislator_data/
+descriptive_statistic_plots/
 xmltodict-1.0.4/
 xmltodict.py
 .venv/

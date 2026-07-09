@@ -6,6 +6,52 @@ import csv
 
 class SmallWorldTools:
 
+    def density(self, G):
+        return nx.density(G)
+
+    def edge_cut(self, G):
+        parties = nx.get_node_attributes(G, "party")
+        if parties == {}:
+            return -1
+        else:
+            # print(G.edges.data())
+            D_nodes = [i for i in parties.keys() if parties[i] == 'D']
+            # D_subgraph = G.subgraph(D_nodes)
+            R_nodes = [i for i in parties.keys() if parties[i] == 'R']
+            # R_subgraph = G.subgraph(R_nodes)
+            c = nx.cut_size(G, D_nodes, R_nodes)
+            m = G.size(weight="weight")
+            return c # float(c/m)
+    
+    def modularity(self, G):
+        parties = nx.get_node_attributes(G, "party")
+        # print(parties)
+        if parties == {}:
+            return -1
+        else:
+            # print(G.edges.data())
+            D_nodes = [i for i in parties.keys() if parties[i] == 'D']
+            # I_nodes = [i for i in parties.keys() if parties[i] == 'I']
+            # D_subgraph = G.subgraph(D_nodes)
+            R_nodes = [i for i in parties.keys() if parties[i] == 'R']
+
+            G = G.subgraph(D_nodes + R_nodes)
+            
+            c = nx.community.modularity(G, [set(D_nodes), set(R_nodes)]) #, set(I_nodes)
+
+            return c
+
+    def largest_clique_size(self, G):
+        clique = nx.make_max_clique_graph(G)
+        return len(list(clique.nodes()))
+
+    def triangle_metrics(self, G):
+        t = list(nx.triangles(G).values())
+        return [sum(t)//3, float(sum(t)/len(t)), float((float(sum(t)/len(t)))/(sum(t)//3))]
+    
+    def connectivity_metrics(self, G):
+        return [nx.node_connectivity(G), nx.average_node_connectivity(G)]
+
     def clustering_coefficient(self, G):
         return nx.average_clustering(G)
         
@@ -54,36 +100,37 @@ class SmallWorldTools:
 
 
 
-tools = SmallWorldTools()
-bill_types = {'house': ['hjres', 'hres', 'hr'], 'senate': ['sjres', 'sres', 's']}
+# tools = SmallWorldTools()
+# bill_types = {'house': ['hjres', 'hres', 'hr'], 'senate': ['sjres', 'sres', 's']}
 
-existing_lines = []
-l = []
-with open("legislative_productivity\DWG_equation.csv", "r", newline='') as f:
-    reader = csv.reader(f, delimiter=',')
-    for l in reader:
-        existing_lines.append(l)
-new_data = []
-for congress_num in range(93, 118):
-    print(congress_num)
-    c_data = []
-    for b in list(bill_types.keys()):
-        datapath = ""
-        for root, dirs, files in os.walk(".\\propublica_data\\" + str(congress_num)):
-            if root.endswith("bills"):
-                datapath = root
-                break
-        individual_congress = Congress(congress_num, datapath, bill_types)
-        individual_congress.build_graph_from_adjlist(b)
-        CC, CC_ratio, PL, PL_ratio, Q = tools.small_world(individual_congress.graph)
-        c_data += [CC, CC_ratio, PL, PL_ratio, Q]
-    new_data.append(c_data)
+# existing_lines = []
+# l = []
+# with open("legislative_productivity\DWG_equation.csv", "r", newline='') as f:
+#     reader = csv.reader(f, delimiter=',')
+#     for l in reader:
+#         existing_lines.append(l)
 
-with open("legislative_productivity\DWG_equation.csv", "w", newline='') as f:
-    data = csv.writer(f,delimiter=',')
-    for i in range(39):
-        existing_line = existing_lines[i]
-        new_line = existing_line
-        if i >= 14:
-            new_line = existing_line + new_data[i - 14]
-        data.writerow(new_line)
+# new_data = []
+# for congress_num in range(93, 118):
+#     print(congress_num)
+#     c_data = []
+#     for b in list(bill_types.keys()):
+#         datapath = ""
+#         for root, dirs, files in os.walk(".\\propublica_data\\" + str(congress_num)):
+#             if root.endswith("bills"):
+#                 datapath = root
+#                 break
+#         individual_congress = Congress(congress_num, datapath, bill_types)
+#         individual_congress.build_graph_from_adjlist(b)
+#         CC, CC_ratio, PL, PL_ratio, Q = tools.small_world(individual_congress.graph)
+#         c_data += [CC, CC_ratio, PL, PL_ratio, Q]
+#     new_data.append(c_data)
+
+# with open("legislative_productivity\DWG_equation.csv", "w", newline='') as f:
+#     data = csv.writer(f,delimiter=',')
+#     for i in range(39):
+#         existing_line = existing_lines[i]
+#         new_line = existing_line
+#         if i >= 14:
+#             new_line = existing_line + new_data[i - 14]
+#         data.writerow(new_line)

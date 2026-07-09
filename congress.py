@@ -4,6 +4,7 @@ import json
 import networkx as nx
 import plotly.graph_objects as go
 import time
+import csv
 
 # Data source: https://projects.propublica.org/datastore/#congressional-data-bulk-legislation-bills
 
@@ -168,6 +169,41 @@ class Congress:
         text = " ".join(text)
         imp_dict = {"details": text}
         return imp_dict
+
+    def shorten_party(self, party_str):
+        if "Republican" in party_str:
+            return "R"
+        elif "Democrat" in party_str:
+            return "D"
+        else:
+            return "I"
+
+    def add_parties_from_github(self, bill_type):
+        G = self.graph
+        congresspeople = G.nodes()
+        # print(congresspeople)
+        party_dict = {}
+        if nx.get_node_attributes(G, "party") == {}:
+            for c in congresspeople:
+                skip = False
+                with open('github_legislator_data\legislators-historical.csv', encoding="utf-8", newline='') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        if c == row['thomas_id'] or c == row['bioguide_id']:
+                            party_dict[c] = self.shorten_party(row['party'])
+                            skip = True
+                            break
+                if skip:
+                    with open('github_legislator_data\legislators-current.csv', encoding="utf-8", newline='') as csvfile:
+                        reader = csv.DictReader(csvfile)
+                        for row in reader:
+                            if c == row['thomas_id'] or c == row['bioguide_id']:
+                                party_dict[c] = self.shorten_party(row['party'])
+                                skip = True
+                                break
+        nx.set_node_attributes(self.graph, party_dict, "party")
+        nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
+
 
     def build_graph_from_adjlist(self, bill_type):
         self.graph = nx.read_graphml(self.savepath + str(bill_type) + ".graphml")
