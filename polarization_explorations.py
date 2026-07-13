@@ -3,14 +3,19 @@ import math
 from congress import Congress
 import os
 import scipy
+from statsmodels.api import add_constant, OLS
 import pandas as pd
 from small_world_analysis import SmallWorldTools
 import matplotlib.pyplot as plt
+
 
 from csvtex import create_latex_table, save_latex_table
 
 tools = SmallWorldTools()
 bill_types = {'house': ['hjres', 'hres', 'hr'], 'senate': ['sjres', 'sres', 's']}
+
+def format_digits(float_num):
+    return str(round(float_num, 3))
 
 def send_to_latex(mylabel, title, csv_filepath, save_title):
     table = create_latex_table(csv_filepath, caption=title, label='tab:'+mylabel)
@@ -26,7 +31,7 @@ def gen_data():
     house_characteristic = []
     senate_characteristic = []
 
-    for congress_num in range(93, 118): #93-118
+    for congress_num in range(99, 118): #93-118
         print(congress_num, "-")
         c_data = []
         for b in list(bill_types.keys()):
@@ -38,32 +43,36 @@ def gen_data():
                     break
             individual_congress = Congress(congress_num, datapath, bill_types)
             individual_congress.build_graph_from_adjlist(b)
+            
             # individual_congress.add_parties_from_github(b) # Comment out if not done yet
 
             G = individual_congress.graph
-            # parties = nx.get_node_attributes(G, "party")
             
-            # D_nodes = [i for i in parties.keys() if parties[i] == 'D']
-            # D_subgraph = G.subgraph(D_nodes)
+            individual_congress.verify_congresspeople(b, G.nodes.data())
 
-            # R_nodes = [i for i in parties.keys() if parties[i] == 'R']
-            # R_subgraph = G.subgraph(R_nodes)
+    #         # parties = nx.get_node_attributes(G, "party")
+            
+    #         # D_nodes = [i for i in parties.keys() if parties[i] == 'D']
+    #         # D_subgraph = G.subgraph(D_nodes)
 
-            characteristic = tools.modularity(G)
-            if b == 'house':
-                house_characteristic.append(characteristic)
-            if b == 'senate':
-                senate_characteristic.append(characteristic)
+    #         # R_nodes = [i for i in parties.keys() if parties[i] == 'R']
+    #         # R_subgraph = G.subgraph(R_nodes)
 
-    label = ["MODULARITY"]
-    print(printable(["HOUSE_" + i for i in label]))
-    for i in house_characteristic:
-        print(printable(i))
+    #         characteristic = tools.modularity(G)
+    #         if b == 'house':
+    #             house_characteristic.append(characteristic)
+    #         if b == 'senate':
+    #             senate_characteristic.append(characteristic)
 
-    print("")
-    print(printable(["SENATE_" + i for i in label]))
-    for i in senate_characteristic:
-        print(printable(i))
+    # label = ["MODULARITY"]
+    # print(printable(["HOUSE_" + i for i in label]))
+    # for i in house_characteristic:
+    #     print(printable(i))
+
+    # print("")
+    # print(printable(["SENATE_" + i for i in label]))
+    # for i in senate_characteristic:
+    #     print(printable(i))
 
 def generate_plots():
     metrics = ["MODULARITY"]
@@ -107,9 +116,40 @@ def generate_plots():
             # print(label, dem_stat, dem_r.pvalue < 0.05, rep_stat, rep_r.pvalue < 0.05, "Comparison:", dem_stat - rep_stat)
             # # print("")
 
+data_filepath = ".\\legislative_productivity\\"
+OLS_filepath = ".\\OLS_tables_small_world\\"
 
-# gen_data()
+def OLS_regressions(y1, y2, independent_variables, dependent_variable):
+    ind1 = ((y1 - 1947)//2)
+    ind2 = ((y2 - 1947)//2)
+    data_table = pd.read_csv(data_filepath + "DWG_equation.csv") 
 
-generate_plots()
+    X = data_table[independent_variables][ind1:ind2]
+    y = data_table[dependent_variable][ind1:ind2]
+    X = add_constant(X)
+    est = OLS(y, X.astype(float)).fit()
+    
+    print(est.summary())
 
-# send_to_latex("correlations", "Pearson $r$ correlations between Democrat/Republican and all-Congress metrics", "legislative_productivity\stat_correlations.csv", "legislative_productivity\stat_correlations.tex")
+    # coeffs = list(est.params)
+    # errors = list(est.bse)
+    # pvals = list(est.pvalues)
+    # print(str(y1) + "-" + str(y2) + " &")
+    # for i in range(len(independent_variables) + 1):
+    #     if pvals[i] < 0.05:
+    #         print("$" + format_digits(coeffs[i]) + "^*$\t&")
+    #     else:
+    #         print(format_digits(coeffs[i]))
+    #     print("(" + format_digits(errors[i]) + ")\t&")
+    # print(str(ind2 - ind1 + 1) + "\t&")
+    # print(format_digits(est.rsquared) + "\t&")
+    # print(format_digits(est.rsquared_adj) + "\t\t&")
+
+gen_data()
+
+# generate_plots()
+
+# ["N of LAWS", "UNI/DIV", "1st 1/2 term", "MOOD", "Budgetary", "Rep. Pres.", "Tea", "HOUSE_CC", "HOUSE_PL", "HOUSE_CC_RATIO", "HOUSE_PL_RATIO", "HOUSE_Q", "SENATE_CC", "SENATE_PL", "SENATE_CC_RATIO", "SENATE_PL_RATIO", "SENATE_Q"]
+# OLS_regressions(1973, 2021, ["N of LAWS", "UNI/DIV", "1st 1/2 term", "Rep. Pres.", "Tea"], "HOUSE_MODULARITY")
+                             
+# send_to_latex("tea", "Pear", "legislative_productivity\stat_correlations.csv", "legislative_productivity\stat_correlations.tex")

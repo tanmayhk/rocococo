@@ -142,6 +142,10 @@ def update_DWG_file():
     
 # update_DWG_file()
 
+# -------------------------------------------------------------------
+# MOSTLY DEPRECATED, MOVING TO POLARIZATION_EXPLORATIONS.PY FUNCTIONS
+# -------------------------------------------------------------------
+
 def OLS_regression(y1, y2): # Table 1 of original paper?
     ind1 = ((y1 - 1947)//2)
     ind2 = ((y2 - 1947)//2)

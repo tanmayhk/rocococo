@@ -36,6 +36,7 @@ class SmallWorldTools:
             R_nodes = [i for i in parties.keys() if parties[i] == 'R']
 
             G = G.subgraph(D_nodes + R_nodes)
+            # print("num_nodes:", len(D_nodes), len(R_nodes), len(D_nodes + R_nodes))
             
             c = nx.community.modularity(G, [set(D_nodes), set(R_nodes)]) #, set(I_nodes)
 

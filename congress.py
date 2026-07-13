@@ -5,6 +5,11 @@ import networkx as nx
 import plotly.graph_objects as go
 import time
 import csv
+from pypdf import PdfReader
+import datetime
+import re
+import pandas as pd
+
 
 # Data source: https://projects.propublica.org/datastore/#congressional-data-bulk-legislation-bills
 
@@ -186,7 +191,7 @@ class Congress:
         if nx.get_node_attributes(G, "party") == {}:
             for c in congresspeople:
                 skip = False
-                with open('github_legislator_data\legislators-historical.csv', encoding="utf-8", newline='') as csvfile:
+                with open('github_legislator_data\\legislators-historical.csv', encoding="utf-8", newline='') as csvfile:
                     reader = csv.DictReader(csvfile)
                     for row in reader:
                         if c == row['thomas_id'] or c == row['bioguide_id']:
@@ -194,7 +199,7 @@ class Congress:
                             skip = True
                             break
                 if skip:
-                    with open('github_legislator_data\legislators-current.csv', encoding="utf-8", newline='') as csvfile:
+                    with open('github_legislator_data\\legislators-current.csv', encoding="utf-8", newline='') as csvfile:
                         reader = csv.DictReader(csvfile)
                         for row in reader:
                             if c == row['thomas_id'] or c == row['bioguide_id']:
@@ -204,9 +209,115 @@ class Congress:
         nx.set_node_attributes(self.graph, party_dict, "party")
         nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
 
-
     def build_graph_from_adjlist(self, bill_type):
         self.graph = nx.read_graphml(self.savepath + str(bill_type) + ".graphml")
+    
+    def verify_congresspeople(self, bill_type, people_names):
+        name_dict = {}
+        state_dict = {}
+        title_dict = {}
+        party_dict = {}
+
+        t0 = time.time()
+        with open("github_legislator_data\\legislators-historical.json", 'r', encoding='utf-8') as f:
+            old_legislators = json.load(f)
+            with open("github_legislator_data\\legislators-current.json", 'r', encoding='utf-8') as f2:
+                new_legislators = json.load(f2)
+                legislators = old_legislators + new_legislators
+
+                date_format1 = "%B %d, %Y"
+                date_format2 = "%Y-%m-%d"
+                start_of_congress = datetime.datetime.strptime("January 3, " + str(1787 + 2*self.number), date_format1)
+                end_of_congress = datetime.datetime.strptime("January 3, " + str(1789 + 2*self.number), date_format1)
+
+                for person in people_names:
+                    person_id = person[0]
+                    # print(person_id in thomas, person_id in bioguides, person_id not in thomas and person_id not in bioguides)
+                    person_details = person[1]
+                    to_print = True
+                    reason = "person not found"
+                    for l in legislators:
+                        if ('bioguide' in l['id'].keys() and person_id == l['id']['bioguide']) or ('thomas' in l['id'].keys() and person_id == l['id']['thomas']):
+                            reason = "no term in range"
+                            for term in l['terms']:
+                                start = datetime.datetime.strptime(term['start'], date_format2)
+                                end = datetime.datetime.strptime(term['end'], date_format2)
+                                if (start <= start_of_congress and end >= start_of_congress) or (start >= start_of_congress and start <= end_of_congress):
+                                    if 'name' not in person_details.keys() and 'fullName' not in person_details.keys():
+                                        full_name = l['name']['last'] + ", " + l['name']['first']
+                                        if 'middle' in l['name'].keys():
+                                            full_name += l['name']['middle'][0] + "."
+                                        if 'suffix' in l['name'].keys():
+                                            full_name += l['name']['suffix'][0] + "."
+                                        name_dict[person_id] = full_name
+                                    if 'party' not in person_details.keys():
+                                        party_dict[person_id] = term['party'][0]
+                                    if 'state' not in person_details.keys():
+                                        state_dict[person_id] = term['state']
+                                    if 'title' not in person_details.keys():
+                                        title_dict[person_id] = term['type'].capitalize()
+                                    to_print = False
+                                    break
+                    if to_print:
+                        print(person_details, reason)
+                        
+        t1 = time.time()
+        print(t1 - t0, "s")
+        nx.set_node_attributes(self.graph, name_dict, "name")
+        nx.set_node_attributes(self.graph, state_dict, "state")
+        nx.set_node_attributes(self.graph, title_dict, "title")
+        nx.set_node_attributes(self.graph, party_dict, "party")
+
+        nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
+
+    
+    def verify_senators(self, bill_type, people_names):
+
+        # print(people_names)
+        reader = PdfReader('github_legislator_data\\senators_chronlist.pdf')
+        date_format = "%B %d, %Y"
+        start_of_congress = datetime.datetime.strptime("January 3, " + str(1787 + 2*self.number), date_format)
+        print(start_of_congress)
+        pages = [reader.pages[i] for i in range(len(reader.pages))]
+        all_text = ''.join([page.extract_text() for page in pages])
+
+        current_legs = pd.read_csv('github_legislator_data\\legislators-current.csv')
+        thomas = list(current_legs['thomas_id'])
+        bioguides = list(current_legs['bioguide_id'])
+
+
+        for person in people_names:
+            person_id = person[0]
+            if person_id.isdigit(): 
+                person_id = int(person_id)
+            # print(person_id in thomas, person_id in bioguides, person_id not in thomas and person_id not in bioguides)
+            person_details = person[1]
+            name_key = ""
+            if 'name' in person_details.keys():
+                full_name = person_details['name']
+            else:
+                full_name = person_details['fullName'][5:].split(" [")[0]
+            lastname = full_name.split(" ")[0]
+            ind = -1
+            ind = all_text.rfind(full_name)
+            if ind == -1:
+                ind = all_text.rfind(lastname)
+            if ind == -1:
+                print(person)
+            else:
+                # print("Looking for", full_name)
+                after_str = all_text[ind:]
+                try:
+                    date_str = re.findall(r'[A-Z][a-z]* \d*, \d\d\d\d', after_str)[0]
+                    expiration_date = datetime.datetime.strptime(date_str, date_format)
+                    # print(full_name, expiration_date)
+                    if start_of_congress > expiration_date and (person_id not in thomas and person_id not in bioguides):
+                        print(person, expiration_date)
+                except ValueError:
+                    if (person_id not in thomas and person_id not in bioguides):
+                        print(person, expiration_date, "---")
+                    pass
+                
 
     def visualize_graph(self, G, bill_type, name_id):
         colors = {"D": "blue", "R": "red", "I": "purple"}
