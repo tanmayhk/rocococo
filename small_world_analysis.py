@@ -21,9 +21,9 @@ class SmallWorldTools:
             # R_subgraph = G.subgraph(R_nodes)
             c = nx.cut_size(G, D_nodes, R_nodes)
             m = G.size(weight="weight")
-            return c # float(c/m)
+            return float(c/m)
     
-    def modularity(self, G):
+    def modularity(self, G): # CURRENTLY SET TO WEIGHTED-----------------------
         parties = nx.get_node_attributes(G, "party")
         # print(parties)
         if parties == {}:
@@ -38,9 +38,28 @@ class SmallWorldTools:
             G = G.subgraph(D_nodes + R_nodes)
             # print("num_nodes:", len(D_nodes), len(R_nodes), len(D_nodes + R_nodes))
             
-            c = nx.community.modularity(G, [set(D_nodes), set(R_nodes)]) #, set(I_nodes)
+            m = nx.community.modularity(G, [set(D_nodes), set(R_nodes)]) # , weight=None #, set(I_nodes) 
 
-            return c
+            return m
+
+    def max_modularity(self, G):
+        parties = nx.get_node_attributes(G, "party")
+        # print(parties)
+        if parties == {}:
+            return -1
+        else:
+            # print(G.edges.data())
+            D_nodes = [i for i in parties.keys() if parties[i] == 'D']
+            # I_nodes = [i for i in parties.keys() if parties[i] == 'I']
+            # D_subgraph = G.subgraph(D_nodes)
+            R_nodes = [i for i in parties.keys() if parties[i] == 'R']
+
+            G = G.subgraph(D_nodes + R_nodes)
+            # print("num_nodes:", len(D_nodes), len(R_nodes), len(D_nodes + R_nodes))
+        
+            c = nx.community.greedy_modularity_communities(G, weight='weight')
+            m = nx.community.modularity(G, c)
+            return m
 
     def largest_clique_size(self, G):
         clique = nx.make_max_clique_graph(G)
@@ -77,27 +96,32 @@ class SmallWorldTools:
 
     def small_world(self, G):
         Gcc = sorted(nx.connected_components(G), key=len, reverse=True)
-        G = G.subgraph(Gcc[0])
-        if nx.is_connected(G):
-            n = len(list(G.nodes()))
-            # print(n)
-            
-            # random_G = nx.gnp_random_graph(n, 0.5)
-            k = float(2*len(list(G.edges()))/n) # average degree
+        if Gcc != []:
+            G = G.subgraph(Gcc[0])
+            if nx.is_connected(G):
+                n = len(list(G.nodes()))
+                # print(n)
+                
+                # random_G = nx.gnp_random_graph(n, 0.5)
 
-            CC = self.clustering_coefficient(G)
-            PL = self.path_length(G)
-            # randCC = self.clustering_coefficient(random_G)
-            # randPL = self.path_length(random_G)
-            randCC = self.random_CC(k, n)
-            randPL = self.random_PL(k, n)
-            CC_ratio = float(CC/randCC)
-            PL_ratio = float(PL/randPL)
+                CC = self.clustering_coefficient(G)
+                PL = self.path_length(G)
+                # randCC = self.clustering_coefficient(random_G)
+                # randPL = self.path_length(random_G)
+                k = float(2*len(list(G.edges()))/n) # average degree
+                Q = -1
+                if k != 0 and float((k - 2)/(k))*(n - 1) + 1 > 0 and n != 1 and k != 2:
+                    randCC = self.random_CC(k, n)
+                    randPL = self.random_PL(k, n)
+                    CC_ratio = float(CC/randCC)
+                    PL_ratio = float(PL/randPL)
 
-            Q = float(CC_ratio/PL_ratio)
+                    Q = float(CC_ratio/PL_ratio)
+            else:
+                print([i for i in nx.connected_components(G)])
+            return [CC, PL, Q] # [CC, PL, CC_ratio, PL_ratio, Q] # [CC_ratio, PL_ratio] #
         else:
-            print([i for i in nx.connected_components(G)])
-        return CC, CC_ratio, PL, PL_ratio, Q
+            return [-1, -1, -1]
 
 
 

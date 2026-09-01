@@ -2,6 +2,7 @@ import os
 import xmltodict
 import json
 import networkx as nx
+import networkx_backbone as nb
 import plotly.graph_objects as go
 import time
 import csv
@@ -9,7 +10,7 @@ from pypdf import PdfReader
 import datetime
 import re
 import pandas as pd
-
+import numpy as np
 
 # Data source: https://projects.propublica.org/datastore/#congressional-data-bulk-legislation-bills
 
@@ -31,6 +32,11 @@ class Congress:
         self.legislators = {}
 
         self.graph = nx.Graph()
+        self.bipartite = nx.Graph()
+        self.backbone = nx.Graph()
+        self.filtered = nx.Graph()
+
+        self.nothing_words = ["medal", "commemorat", "renam", "memorial", "condolence", "memory"]
     
     def clean_XML_string(self, xml_text):
         to_remove = ["item"]
@@ -88,6 +94,7 @@ class Congress:
         return bioguides
 
     def get_bills(self, dump=False, save_graph=False):
+        t0 = time.time()
         for bill_category in list(self.bill_types.keys()):
             bill_formats = self.bill_types[bill_category]
             edges = []
@@ -156,6 +163,8 @@ class Congress:
                     json.dump(self.legislators, f, ensure_ascii=False)
 
         self.graph = nx.Graph()
+        t1 = time.time()
+        print("Bills retrieved:", t1 - t0, "s")
         return self.is_xml
     
     def get_from_json(self):
@@ -212,11 +221,21 @@ class Congress:
     def build_graph_from_adjlist(self, bill_type):
         self.graph = nx.read_graphml(self.savepath + str(bill_type) + ".graphml")
     
+    def build_bipartite_from_adjlist(self, bill_type):
+        self.bipartite = nx.read_graphml(self.savepath + str(bill_type) + "_bipartite.graphml")
+
+    def build_backbone_from_adjlist(self, bill_type):
+        self.backbone = nx.read_graphml(self.savepath + str(bill_type) + "_backbone.graphml")
+    
+    def build_filtered_from_adjlist(self, bill_type):
+        self.filtered = nx.read_graphml(self.savepath + str(bill_type) + "_filtered.graphml")
+    
     def verify_congresspeople(self, bill_type, people_names):
         name_dict = {}
         state_dict = {}
         title_dict = {}
         party_dict = {}
+        icpsr_dict = {}
 
         t0 = time.time()
         with open("github_legislator_data\\legislators-historical.json", 'r', encoding='utf-8') as f:
@@ -239,37 +258,192 @@ class Congress:
                     for l in legislators:
                         if ('bioguide' in l['id'].keys() and person_id == l['id']['bioguide']) or ('thomas' in l['id'].keys() and person_id == l['id']['thomas']):
                             reason = "no term in range"
-                            for term in l['terms']:
-                                start = datetime.datetime.strptime(term['start'], date_format2)
-                                end = datetime.datetime.strptime(term['end'], date_format2)
-                                if (start <= start_of_congress and end >= start_of_congress) or (start >= start_of_congress and start <= end_of_congress):
-                                    if 'name' not in person_details.keys() and 'fullName' not in person_details.keys():
-                                        full_name = l['name']['last'] + ", " + l['name']['first']
-                                        if 'middle' in l['name'].keys():
-                                            full_name += l['name']['middle'][0] + "."
-                                        if 'suffix' in l['name'].keys():
-                                            full_name += l['name']['suffix'][0] + "."
-                                        name_dict[person_id] = full_name
-                                    if 'party' not in person_details.keys():
-                                        party_dict[person_id] = term['party'][0]
-                                    if 'state' not in person_details.keys():
-                                        state_dict[person_id] = term['state']
-                                    if 'title' not in person_details.keys():
-                                        title_dict[person_id] = term['type'].capitalize()
-                                    to_print = False
-                                    break
-                    if to_print:
-                        print(person_details, reason)
+                            if 'icpsr' in l['id'].keys():
+                                icpsr_dict[person_id] = l['id']['icpsr']
+                    #         for term in l['terms']:
+                    #             start = datetime.datetime.strptime(term['start'], date_format2)
+                    #             end = datetime.datetime.strptime(term['end'], date_format2)
+                    #             if (start <= start_of_congress and end >= start_of_congress) or (start >= start_of_congress and start <= end_of_congress):
+                    #                 if 'name' not in person_details.keys() and 'fullName' not in person_details.keys():
+                    #                     full_name = l['name']['last'] + ", " + l['name']['first']
+                    #                     if 'middle' in l['name'].keys():
+                    #                         full_name += l['name']['middle'][0] + "."
+                    #                     if 'suffix' in l['name'].keys():
+                    #                         full_name += l['name']['suffix'][0] + "."
+                    #                     name_dict[person_id] = full_name
+                    #                 if 'party' not in person_details.keys():
+                    #                     party_dict[person_id] = term['party'][0]
+                    #                 if 'state' not in person_details.keys():
+                    #                     state_dict[person_id] = term['state']
+                    #                 if 'title' not in person_details.keys():
+                    #                     title_dict[person_id] = term['type'].capitalize()
+                    #                 to_print = False
+                    #                 break
+                    # if to_print:
+                    #     print(person_details, reason)
                         
         t1 = time.time()
-        print(t1 - t0, "s")
-        nx.set_node_attributes(self.graph, name_dict, "name")
-        nx.set_node_attributes(self.graph, state_dict, "state")
-        nx.set_node_attributes(self.graph, title_dict, "title")
-        nx.set_node_attributes(self.graph, party_dict, "party")
+        print("Congressional verification:", t1 - t0, "s")
+        # nx.set_node_attributes(self.graph, name_dict, "name")
+        # nx.set_node_attributes(self.graph, state_dict, "state")
+        # nx.set_node_attributes(self.graph, title_dict, "title")
+        # nx.set_node_attributes(self.graph, party_dict, "party")
+        nx.set_node_attributes(self.graph, icpsr_dict, "icpsr")
 
         nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
 
+    def add_house_predicted_ethnicities(self, bill_type, ethnicity_table):
+        t0 = time.time()
+        vertex_list = self.graph.nodes.data()
+
+        is_white_dict = {}
+        ethnicity_dict = {}
+        
+        c = 0
+        for v in vertex_list:
+            person_details = v[1]
+            if 'name' in person_details.keys():
+                full_name = person_details['name']
+            else:
+                full_name = person_details['fullName'][5:].split(" [")[0]
+            stop = False
+            for i in range(len(ethnicity_table)):
+                if ethnicity_table['bioguide'][i] == v[0] or ('icpsr' in person_details.keys() and ethnicity_table['icpsr'][i] == person_details['icpsr']):
+                    non_white = ethnicity_table['non_white'][i]
+                    is_white = None
+                    if non_white != non_white or non_white == np.float64(0.0):
+                        is_white = True
+                    elif non_white == np.float64(1.0):
+                        is_white = False
+                    is_white_dict[v[0]] = is_white
+
+                    ethnicity = "White"
+                    black = ethnicity_table['afam'][i]
+                    latino = ethnicity_table['latino'][i]
+                    asian = ethnicity_table['asian'][i]
+
+                    if black == np.float64(1.0):
+                        ethnicity = "African American"
+                        stop = True
+                    if latino == np.float64(1.0):
+                        ethnicity = "Latino"
+                        stop = True
+                    if asian == np.float64(1.0):
+                        ethnicity = "Asian"
+                        stop = True
+                    ethnicity_dict[v[0]] = ethnicity   
+                    # print(c, full_name, ethnicity, is_white)
+                    if stop:
+                        break
+            c += 1     
+        t1 = time.time()
+        print("House ethnicities:", t1 - t0, "s")
+
+        nx.set_node_attributes(self.graph, is_white_dict, "is_white")
+        nx.set_node_attributes(self.graph, ethnicity_dict, "ethnicity")      
+
+        nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
+
+    def update_bill_edges(self, chamber, save_graph):
+        attrs = {}
+
+        sponsor_field = "sponsors"
+        cosponsor_field = "cosponsors"
+        for b in self.all_bills.keys():
+            if b[0] == chamber[0]:
+                self.bipartite.add_node(b)
+                bill_dictionary = self.all_bills[b]
+                fields = list(bill_dictionary.keys())
+                if "sponsor" in fields:
+                    sponsor_field = "sponsor"
+                if sponsor_field in fields and bill_dictionary[sponsor_field] not in [None, []]:
+                    sponsor = self.get_legislators(bill_dictionary[sponsor_field])
+                    if type(sponsor) == type([]):
+                        sponsor = sponsor[0]
+                    if cosponsor_field in fields and bill_dictionary[cosponsor_field] not in [None, []]:
+                        cosponsor = self.get_legislators(bill_dictionary[cosponsor_field])
+                        for c in cosponsor:
+                            edge = (sponsor, c)
+                            if (sponsor, c) in attrs.keys():
+                                attrs[(sponsor, c)] += " " + b
+                            elif (c, sponsor) in attrs.keys():
+                                attrs[(c, sponsor)] += " " + b
+                            else:
+                                attrs[(sponsor, c)] = b
+        nx.set_edge_attributes(self.graph, attrs, "bills")
+        if save_graph:
+            nx.write_graphml_lxml(self.graph, self.savepath + str(chamber) + ".graphml")
+
+    def get_bill_text(self, bill_details):
+        if 'summaries' in bill_details.keys():
+            summary = bill_details['summaries']
+            if 'summary' in summary.keys():
+                summary = summary['summary']
+                if type(summary) == type([]):
+                    return summary[0]['text'].lower()
+                elif type(summary) == type({}):
+                    return summary['text'].lower()
+            else:
+                summary = summary['billSummaries']
+                if summary != None:
+                    summary = summary['text']
+                    if type(summary) == type([]):
+                        return summary[0].lower()
+                    else:
+                        return summary.lower()
+        elif 'summary' in bill_details.keys():
+            summary = bill_details['summary']
+            if summary != None:
+                if 'text' in summary.keys():
+                    return summary['text'].lower()
+        return ""
+
+    def cosponsor_metric(self, cosponsors):
+        if type(cosponsors) == type({}):
+            cosponsors = cosponsors['isOriginalCosponsor']
+            num_cosponsors = len(cosponsors) # float(cosponsors.count('True')) # 
+        else:
+            num_cosponsors = len(cosponsors)
+        return num_cosponsors
+
+    def filter_nothing_bills(self, chamber, save_graph):
+        bad_bills = []
+        for bill in self.all_bills.keys():
+            bill_details = self.all_bills[bill]
+            if 'cosponsors' in bill_details.keys():
+                cosponsors = bill_details['cosponsors']
+                if cosponsors != None:
+                    is_nothing = False
+                    bill_text = self.get_bill_text(bill_details)
+                    for w in self.nothing_words:
+                        if w in bill_text:
+                            is_nothing = True
+
+                    if is_nothing:
+                        bad_bills.append(bill)
+                         
+        self.filtered.add_nodes_from(self.graph.nodes(data=True))
+
+        existing_edges = list(self.graph.edges.data())
+        edges_to_add = []
+        for e in existing_edges:
+            edited_bills = []
+            weight = 0
+            if 'bills' in e[2].keys():
+                bills = e[2]['bills'].split(" ")
+                to_add = True
+                for b in bills:
+                    if b not in bad_bills:
+                        edited_bills.append(b)
+                        weight += 1
+                if weight != 0:
+                    edge = (e[0], e[1], {"weight": weight, "bills": " ".join(edited_bills)})
+                    edges_to_add.append(edge)
+
+        self.filtered.add_edges_from(edges_to_add)
+                
+        if save_graph:
+            nx.write_graphml_lxml(self.filtered, self.savepath + str(chamber) + "_filtered.graphml")
     
     def verify_senators(self, bill_type, people_names):
 
@@ -317,7 +491,54 @@ class Congress:
                     if (person_id not in thomas and person_id not in bioguides):
                         print(person, expiration_date, "---")
                     pass
-                
+
+    def build_bipartite_graph(self, chamber, save_graph): # after building normal graph
+        t0 = time.time()
+        edges = []
+        self.bipartite.add_nodes_from(self.graph.nodes(data=True)) # add congresspeople
+        # bill_data = [(k, self.all_bills[k]) for k in self.all_bills.keys()]
+
+        sponsor_field = "sponsors"
+        cosponsor_field = "cosponsors"
+        for b in self.all_bills.keys():
+            if b[0] == chamber[0]:
+                self.bipartite.add_node(b)
+                bill_dictionary = self.all_bills[b]
+                fields = list(bill_dictionary.keys())
+                if "sponsor" in fields:
+                    sponsor_field = "sponsor"
+                if sponsor_field in fields and bill_dictionary[sponsor_field] not in [None, []]:
+                    sponsor = self.get_legislators(bill_dictionary[sponsor_field])
+                    if type(sponsor) == type([]):
+                        sponsor = sponsor[0]
+                    if cosponsor_field in fields and bill_dictionary[cosponsor_field] not in [None, []]:
+                        cosponsor = self.get_legislators(bill_dictionary[cosponsor_field])
+                        if type(cosponsor) != type([]):
+                            cosponsor = [cosponsor]
+                        cosponsor.append(sponsor)
+                        for c in cosponsor:
+                            edge = (c, b)
+                            edges.append(edge)
+        self.bipartite.add_edges_from(edges)
+        if save_graph:
+            nx.write_graphml_lxml(self.bipartite, self.savepath + str(chamber) + "_bipartite.graphml")
+        t1 = time.time()
+        print("Bipartite built in", t1 - t0, "s")
+
+
+    def build_backbone(self, chamber, save_graph):
+        t0 = time.time()
+        B = self.bipartite
+        G = self.graph
+        congresspeople_nodes = [n for n in B.nodes() if ('h' != n[0] and 's' != n[0])]
+        scored = nb.sdsm(B, agent_nodes=congresspeople_nodes) #, projection="hyper"
+        self.backbone = nb.threshold_filter(scored, "sdsm_pvalue", 0.05, mode="below")
+        self.backbone.add_nodes_from(G.nodes(data=True))
+
+        if save_graph:
+            nx.write_graphml_lxml(self.backbone, self.savepath + str(chamber) + "_backbone.graphml")
+        t1 = time.time()
+        print("Backbone built in", t1 - t0, "s")
 
     def visualize_graph(self, G, bill_type, name_id):
         colors = {"D": "blue", "R": "red", "I": "purple"}
@@ -369,33 +590,39 @@ class Congress:
         fig.write_html(self.savepath + filetitle + ".html")      
 
 
+def rebuild_base_graphs(congress_num, ET,  to_verify):
+    bill_types = {'house': ['hjres', 'hres', 'hr'], 'senate': ['sjres', 'sres', 's']}
+
+    datapath = ""
+    for root, dirs, files in os.walk(".\\propublica_data\\" + str(congress_num)):
+        if root.endswith("bills"):
+            datapath = root
+            break
+    individual_congress = Congress(congress_num, datapath, bill_types)
+    if not to_verify:
+        individual_congress.get_bills(dump=True, save_graph=True)
+
+    for b in list(bill_types.keys()):
+        print(b)
+        if not to_verify:
+            individual_congress.build_graph_from_adjlist(b)
+            individual_congress.add_parties_from_github(b)
+            individual_congress.update_bill_edges(b, True) 
+            G = individual_congress.graph 
+            individual_congress.verify_congresspeople(b, G.nodes.data())
+            if b == 'house':
+                individual_congress.add_house_predicted_ethnicities(b, ET)
+
+        else:
+            individual_congress.build_graph_from_adjlist(b)
+            individual_congress.get_from_json()
+
 def main():
-    for congress_num in range(116, 117):
-        t0 = time.time()
-        bill_types = {'senate': ['sjres', 'sres', 's'], 'house': ['hjres', 'hres', 'hr']}
-        datapath = ""
-        for root, dirs, files in os.walk(".\\propublica_data\\" + str(congress_num)):
-            if root.endswith("bills"):
-                datapath = root
-                break
-        print(datapath)
-
-        # bill_types = {'senate': ['sjres'], 'house': []}
-        # individual_congress = Congress(93, r".\propublica_data\93\bills", bill_types)
-
-        individual_congress = Congress(congress_num, datapath, bill_types)
-        is_xml = individual_congress.get_bills(dump=True, save_graph=True)
-        # individual_congress.get_from_json()
-        # for b in list(bill_types.keys()):
-        #     individual_congress.build_graph_from_adjlist(b)
-        #     if is_xml:
-        #         individual_congress.visualize_graph(b, 'fullName')
-        #     else:
-        #         individual_congress.visualize_graph(b, 'name')
-        t1 = time.time()
-        print("TOTAL TIME for", congress_num, "=", t1 - t0, "seconds")
-
-
+    ET = pd.read_csv("github_legislator_data\\msu_ippsr_house_data_93-117.csv")
+    for congress_num in range(93, 94): #93, 118
+        print(congress_num, "-")
+        rebuild_base_graphs(congress_num, ET, False)
+        
 
 if __name__ == "__main__":
     main()
