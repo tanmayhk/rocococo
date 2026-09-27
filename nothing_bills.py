@@ -2,24 +2,101 @@ import networkx as nx
 import math
 from congress import Congress
 import os
-import scipy
 from statsmodels.api import add_constant, OLS
 from statsmodels.stats import descriptivestats
 import pandas as pd
 from small_world_analysis import SmallWorldTools
 import matplotlib.pyplot as plt
-import csv
-import io
 from csvtex import create_latex_table, save_latex_table
 import networkx_backbone as nb
 from polarization_explorations import printable
 import numpy as np
 import seaborn as sns
 from scipy.signal import argrelextrema
+import statistics
 
 tools = SmallWorldTools()
 bill_types = {'house': ['hjres', 'hres', 'hr'], 'senate': ['sjres', 'sres', 's']}
 
+
+def check_minority_cosponsors():
+    for congress_num in range(93, 118): #93, 118
+        house_cosponsors = []
+        senate_cosponsors = []
+        # print(congress_num, "-")
+        datapath = ""
+        for root, dirs, files in os.walk(".\\propublica_data\\" + str(congress_num)):
+            if root.endswith("bills"):
+                datapath = root
+                break
+        individual_congress = Congress(congress_num, datapath, bill_types)
+        individual_congress.get_from_json()
+        individual_congress.build_filtered_from_adjlist('house')
+        F = individual_congress.filtered
+        minorities = nx.get_node_attributes(F, "ethnicity")
+
+        # w = []
+        # m = []
+        # for i in F.nodes():
+        #     n = F.degree(i, weight='weight') / F.degree[i]
+        #     if minorities[i] == 'White':
+        #         w.append(n)
+        #     else:
+        #         m.append(n)
+        # print(printable([statistics.mean(w), statistics.mean(m), statistics.median(w), statistics.median(m)]))
+
+        bill_names = individual_congress.all_bills.keys()
+        # print(len(bill_names))
+
+        num_cosponsors = {i : [] for i in F.nodes()}
+    
+        for bill in bill_names:
+            if bill[0] == 'h':
+                bill_details = individual_congress.all_bills[bill]
+                if 'cosponsors' in bill_details.keys():
+                    cosponsors = bill_details['cosponsors']
+                    fields = list(bill_details.keys())
+                    sponsor = ""
+                    if "sponsor" in fields:
+                        sponsor = bill_details["sponsor"]
+                    else:
+                        sponsor = bill_details['sponsors']
+                    if sponsor not in [None, []]:
+                        sponsor = individual_congress.get_legislators(sponsor)
+                        if cosponsors not in [None, []]:
+                            cosponsor = individual_congress.get_legislators(cosponsors)
+                            if type(cosponsor) == type(""):
+                                cosponsor = [cosponsor]
+                            if type(sponsor) == type([]):
+                                cosponsor = cosponsor + sponsor
+                                sponsor = sponsor[0]
+                            else:
+                                cosponsor.append(sponsor)
+                            n = len(cosponsor)
+                            numerator = 0
+                            denom = 0
+                            for c in cosponsor:
+                                denom += 1
+                                if minorities[c] != 'White':
+                                    numerator += 1
+                            if minorities[sponsor] == 'White':
+                                num_cosponsors[sponsor].append(numerator)
+                            else:
+                                num_cosponsors[sponsor].append(numerator)
+                            # for c in cosponsor:
+                            #     num_cosponsors[c].append(n)
+
+        w = []
+        m = []
+        for i in F.nodes():
+            if num_cosponsors[i] not in [None, []]:
+                q = num_cosponsors[i] # q = statistics.median(num_cosponsors[i])
+                if minorities[i] == 'White':
+                    w += q # w.append(q)
+                else:
+                    m += q # m.append(q)
+
+        print(printable([statistics.mean(w), statistics.mean(m), statistics.median(w), statistics.median(m)]))
 
 
 def calculate_threshold(data):
@@ -183,5 +260,6 @@ def verify_filtered_graphs():
 
 # cosponsor_histograms()
 # backbone_analysis()
-
 # verify_filtered_graphs()
+
+check_minority_cosponsors()

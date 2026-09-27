@@ -23,7 +23,7 @@ class SmallWorldTools:
             m = G.size(weight="weight")
             return float(c/m)
     
-    def modularity(self, G): # CURRENTLY SET TO WEIGHTED-----------------------
+    def modularity(self, G): # CURRENTLY SET TO UNWEIGHTED-----------------------
         parties = nx.get_node_attributes(G, "party")
         # print(parties)
         if parties == {}:
@@ -42,6 +42,25 @@ class SmallWorldTools:
 
             return m
 
+    def minority_modularity(self, G): # CURRENTLY SET TO UNWEIGHTED-----------------------
+        parties = nx.get_node_attributes(G, "ethnicity")
+        # print(parties)
+        if parties == {}:
+            return -1
+        else:
+            # print(G.edges.data())
+            D_nodes = [i for i in parties.keys() if parties[i] == 'White']
+            # I_nodes = [i for i in parties.keys() if parties[i] == 'I']
+            # D_subgraph = G.subgraph(D_nodes)
+            R_nodes = [i for i in parties.keys() if parties[i] != 'White']
+    
+            G = G.subgraph(D_nodes + R_nodes)
+            # print("num_nodes:", len(D_nodes), len(R_nodes), len(D_nodes + R_nodes))
+            
+            m = nx.community.modularity(G, [set(D_nodes), set(R_nodes)]) # , weight=None #, set(I_nodes) 
+    
+            return m
+        
     def max_modularity(self, G):
         parties = nx.get_node_attributes(G, "party")
         # print(parties)
@@ -77,6 +96,23 @@ class SmallWorldTools:
         
     def path_length(self, G):
         return nx.average_shortest_path_length(G)
+
+    def individual_clustering_coefficient(self, G, v):
+        return nx.clustering(G, v, weight='weight')
+
+    def individual_inter_intra_partisanship(self, G, v):
+        parties = nx.get_node_attributes(G, "party")
+        party = parties[v]
+        intra = 0
+        inter = 0
+        for e in G.edges(v, data=True):
+            v2 = e[1]
+            if parties[v2] != party:
+                inter += e[2]['weight'] # 1 #
+            else:
+                intra += e[2]['weight'] # 1 #
+        return float(intra/(inter + intra))
+
 
     # FOR APPROXIMATIONS, UNCLEAR WHAT k MEANS
     # Source: https://snap-stanford.github.io/cs224w-notes/preliminaries/measuring-networks-random-graphs

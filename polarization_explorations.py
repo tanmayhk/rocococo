@@ -2,7 +2,7 @@ import networkx as nx
 import math
 from congress import Congress
 import os
-import scipy
+import statistics
 from statsmodels.api import add_constant, OLS
 from statsmodels.stats import descriptivestats
 import pandas as pd
@@ -44,60 +44,69 @@ def gen_data():
             
             individual_congress = Congress(congress_num, datapath, bill_types)
             individual_congress.build_graph_from_adjlist(b)
-            individual_congress.get_from_json()
+            # individual_congress.get_from_json()
             # individual_congress.filter_nothing_bills(b, True)
             individual_congress.build_filtered_from_adjlist(b)
         
-            G = individual_congress.graph
+            # G = individual_congress.graph
             F = individual_congress.filtered
-            if b == 'house':
-                house_characteristic[0].append(len(list(F.edges)))
-                house_characteristic[1].append(len(list(G.edges)))
-            else:
-                senate_characteristic[0].append(len(list(F.edges)))
-                senate_characteristic[1].append(len(list(G.edges)))
+
+            # if b == 'house':
+            #     # individual_congress.add_house_predicted_ethnicities(b, ET)
+            #     # individual_congress.add_house_district_info(b, ET)
+            #     # individual_congress.add_house_parties_manually(b)
+            #     similarity_dict = individual_congress.compare_minority_white_legislators()
+            #     minority_stats = []
+            #     CC_stats = []
+            #     for v1 in list(similarity_dict.keys()):
+            #         v2 = similarity_dict[v1]
+            #         metric_v1 = tools.individual_inter_intra_partisanship(F, v1)
+            #         metric_v2 = tools.individual_inter_intra_partisanship(F, v2)
+            #         minority_stats.append(metric_v1 - metric_v2)
+
+            #         metric_v1 = tools.individual_clustering_coefficient(F, v1)
+            #         metric_v2 = tools.individual_clustering_coefficient(F, v2)
+            #         CC_stats.append(metric_v1 - metric_v2)
+
+            #     house_characteristic[0].append([statistics.mean(minority_stats), statistics.median(minority_stats), statistics.mean(CC_stats), statistics.median(CC_stats)]) # , statistics.median(white_stats)
+
+            
+            # if b == 'house':
+            #     house_characteristic[0].append(len(list(F.edges)))
+            #     house_characteristic[1].append(len(list(G.edges)))
+            # else:
+            #     senate_characteristic[0].append(len(list(F.edges)))
+            #     senate_characteristic[1].append(len(list(G.edges)))
 
 
             # # individual_congress.add_parties_from_github(b) # Comment out if not done yet
             # # individual_congress.verify_congresspeople(b, G.nodes.data())
-            # # if b == 'house':
-            # #     individual_congress.add_house_predicted_ethnicities(b, ET)
 
-            # parties = nx.get_node_attributes(F, "party")
-            # minorities = nx.get_node_attributes(F, "ethnicity")
-            # all_keys = [i for i in minorities.keys() if i in parties.keys()]
-            # print([len([i for i in all_keys if parties[i] == 'D']), len([i for i in all_keys if parties[i] == 'R']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'D']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'R'])])
+            if b == 'house':
+                parties = nx.get_node_attributes(F, "party")
+                minorities = nx.get_node_attributes(F, "ethnicity")
+                all_keys = [i for i in minorities.keys() if i in parties.keys()]
+                # print([len([i for i in all_keys if parties[i] == 'D']), len([i for i in all_keys if parties[i] == 'R']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'D']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'R'])])
 
-            # for j in range(2):
-            #     party = ['D', 'R'][j]
-            #     # MINORITIES
-            #     minority_nodes = [i for i in all_keys if minorities[i] == "White" and parties[i] == party]
-            #     minority_subgraph =  F.subgraph(minority_nodes)
-            #     characteristic = tools.small_world(minority_subgraph)
-            #     characteristic2 = tools.density(minority_subgraph)
-            #     characteristic.append(characteristic2)                    
+                for j in range(2):
+                    is_white = [True, False][j]
+                    # house_characteristic[j].append([len([i for i in all_keys if parties[i] == 'D']), len([i for i in all_keys if parties[i] == 'R']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'D']), len([i for i in all_keys if minorities[i] == "White" and parties[i] == 'R'])])
+                    # MINORITIES
+                    minority_nodes = [i for i in minorities.keys() if (minorities[i] == "White") == is_white] # all_keys if minorities[i] == "White" and parties[i] == party
+                    minority_subgraph =  F.subgraph(minority_nodes)
+                    characteristic = tools.small_world(minority_subgraph)
+                    characteristic2 = tools.density(minority_subgraph)
+                    characteristic.append(characteristic2)                    
 
-            #     house_characteristic[j].append(characteristic)
+                    house_characteristic[j].append(characteristic)
 
-            #  b == 'house':
-            #   parties = nx.get_node_attributes(G, "party")
-            #   minorities = nx.get_node_attributes(G, "ethnicity")
-            #   all_keys = [i for i in minorities.keys() if i in parties.keys()]
+    # print("")
+    # # label = ["MODULARITY"]
+    # # print(printable(["HOUSE_" + i for i in label]))
 
-            #   house_characteristic.append([len([i for i in all_keys if parties[i] == 'D']), len([i for i in all_keys if parties[i] == 'R']), len([i for i in all_keys if minorities[i] != "White" and parties[i] == 'D']), len([i for i in all_keys if minorities[i] != "White" and parties[i] == 'R'])])
-            #   # minority_nodes = [i for i in all_keys if minorities[i] != "White" and parties[i] == 'R']
-            #   # minority_subgraph =  G.subgraph(minority_nodes)
-            #   # small_world = tools.small_world(minority_subgraph)
-            #   # characteristic = tools.density(minority_subgraph)
-            #   # small_world.append(characteristic)
-
-            #   # house_characteristic.append(small_world)
     
-    print("")
-    # label = ["MODULARITY"]
-    # print(printable(["HOUSE_" + i for i in label]))
     for j in range(2):
-        print(["FILTERED", "UNFILTERED"][j])
+        print(["White", "Minority"][j])
 
         for i in house_characteristic[j]:
             print(printable(i))
@@ -208,55 +217,57 @@ def generate_minority_plots():
                         power_over_time = [group_coeff/i for i in list(minority_data[k])]
                         plt.plot(years, power_over_time, label=v[0] + ": " + str(group_coeff), color=v[1], linestyle=v[2])
                 plt.legend()
-                plt.savefig("descriptive_statistic_plots\\filtered_graph\\regression_coefficient_graphs\\MAX_MODULARITY\\" + metric + "_MODULARITY_ETHNICITIES_ADJCOEFF" + ".jpg")
+                plt.savefig("descriptive_statistic_plots\\filtered_graph\\regression_coefficient_graphs\\MAX_MODULARITY\\" + metric + "_MAX_MODULARITY_ETHNICITIES_ADJCOEFF_FIXED" + ".jpg")
                 plt.clf()
         # plt.legend()
         # plt.savefig("descriptive_statistic_plots\\house_minority\\" + label + ".jpg")
         # plt.clf()
         
 def generate_plots():
-    metrics = ["EDGES_FILTERED_PROPORTION_OF_ORIGINAL"] # ["CC", "CC_RATIO", "PL", "PL_RATIO", "Q", "DENSITY"]
+    metrics = ["CC", "PL", "Q", "DENSITY"]
     dem = pd.read_csv("legislative_productivity\\filtered_democrat_descriptive_stats.csv")
     rep = pd.read_csv("legislative_productivity\\filtered_republican_descriptive_stats.csv")
-    allc = pd.read_csv("legislative_productivity\\filtered_statistics.csv")
+    allc = pd.read_csv("legislative_productivity\\filtered_minority_metrics.csv")
 
     years = list(dem["YEARS"])
     # print(years)
     f = plt.figure()
     f.set_figwidth(24)
     f.set_figheight(8)
-    for chamberd in [("HOUSE", "House Edges Removed (Proportion)", "-"), ("SENATE", "Senate Edges Removed (Proportion)", "--")]:
-        chamber = chamberd[0]
-        for metric in metrics:
-            label = chamber + "_" + metric
-            # dem_data = list(dem[label])
-            # rep_data = list(rep[label])
-            allc_data = list(allc[label])
-            plt.plot(years, allc_data, label=chamberd[1], color='black', linestyle=chamberd[2])
-            # plt.plot(years, dem_data, label='Democrat', color='blue')
-            # plt.plot(years, rep_data, label='Republican', color='red')
+    groups = {"DEM_MIN_": ['Democrat (Minority)', 'blue', ':'], "DEM_WHITE_": ['Democrat (White)', 'blue', '--'], "REP_MIN_":['Republican (Minority)', 'red', ':'], "REP_WHITE_": ['Republican (White)', 'red', '--']}
+    for metric in metrics:
+        for chamber in ["HOUSE_"]:
+            for group in groups.keys():
+                chamberd = groups[group]
+                label = group + chamber + metric
+                # dem_data = list(dem[label])
+                # rep_data = list(rep[label])
+                allc_data = list(allc[label])
+                allc_data = [None if (i == -1 or i == 0) else i for i in list(allc_data)]
+                plt.plot(years, allc_data, label=chamberd[0], color=chamberd[1], linestyle=chamberd[2])
+                # plt.plot(years, dem_data, label='Democrat', color='blue')
+                # plt.plot(years, rep_data, label='Republican', color='red')
 
-            # dem_error_sum = 0
-            # rep_error_sum = 0
-            # num_errors = 0
-            # for i in range(len(dem_data)):
-            #     dem_error_sum += (allc_data[i] - dem_data[i])**2
-            #     rep_error_sum += (allc_data[i] - rep_data[i])**2
-            #     num_errors += 1
-            # dem_error = float(dem_error_sum/num_errors)
-            # rep_error = float(rep_error_sum/num_errors)
-            # # print(label, dem_error, rep_error, dem_error > rep_error)
+                # dem_error_sum = 0
+                # rep_error_sum = 0
+                # num_errors = 0
+                # for i in range(len(dem_data)):
+                #     dem_error_sum += (allc_data[i] - dem_data[i])**2
+                #     rep_error_sum += (allc_data[i] - rep_data[i])**2
+                #     num_errors += 1
+                # dem_error = float(dem_error_sum/num_errors)
+                # rep_error = float(rep_error_sum/num_errors)
+                # # print(label, dem_error, rep_error, dem_error > rep_error)
 
-            # dem_r = scipy.stats.pearsonr(dem_data, allc_data)
-            # rep_r = scipy.stats.pearsonr(rep_data, allc_data)
-            # dem_stat = dem_r.statistic
-            # rep_stat = rep_r.statistic
-            # print(label, round(dem_stat, 3), dem_r.pvalue < 0.05, round(rep_stat, 3), rep_r.pvalue < 0.05, "Comparison:", round(dem_stat - rep_stat, 3))
-            # # print("")
-    v = "EDGES_REMOVED_PROPORTION"
-    plt.legend()
-    plt.savefig("descriptive_statistic_plots\\filtered_graph\\filtering_plots\\" + v + ".jpg")
-    plt.clf()
+                # dem_r = scipy.stats.pearsonr(dem_data, allc_data)
+                # rep_r = scipy.stats.pearsonr(rep_data, allc_data)
+                # dem_stat = dem_r.statistic
+                # rep_stat = rep_r.statistic
+                # print(label, round(dem_stat, 3), dem_r.pvalue < 0.05, round(rep_stat, 3), rep_r.pvalue < 0.05, "Comparison:", round(dem_stat - rep_stat, 3))
+                # # print("")
+            plt.legend()
+            plt.savefig("descriptive_statistic_plots\\filtered_graph\\all_metrics_minority_party_split\\" + metric + ".jpg")
+            plt.clf()
 
 data_filepath = ".\\legislative_productivity\\"
 OLS_filepath = ".\\OLS_tables_small_world\\"
@@ -311,10 +322,18 @@ ind_vars = ["UNI/DIV", "1st 1/2 term", "Rep. Pres."]
 y1 = 1973
 y2 = 2021
 is_print = False
+added_house_vars = ["House Minorities", "House Norm Age", "House 60", "House Women"]
+added_senate_vars = ["Senate Minorities", "Senate Norm Age", "Senate 60", "Senate Women"]
 OLS_regressions("house_modularity_NO_minorities,UNFILTERED", y1, y2, ind_vars, "HOUSE_UNWEIGHTED_MODULARITY", is_print)
-OLS_regressions("house_modularity_minorities,UNFILTERED", y1, y2, ind_vars + ["House Minorities"], "HOUSE_UNWEIGHTED_MODULARITY", is_print)
-print("\n\n================================================================\n\n")
+OLS_regressions("house_modularity_minorities,UNFILTERED", y1, y2, ind_vars + added_house_vars, "HOUSE_UNWEIGHTED_MODULARITY", is_print)
+print("-------------------------------------------------------------------")
 OLS_regressions("senate_modularity_NO_minorities,UNFILTERED", y1, y2, ind_vars, "SENATE_UNWEIGHTED_MODULARITY", is_print)
-OLS_regressions("senate_modularity_minorities,UNFILTERED", y1, y2, ind_vars + ["Senate Minorities"], "SENATE_UNWEIGHTED_MODULARITY", is_print)
+OLS_regressions("senate_modularity_minorities,UNFILTERED", y1, y2, ind_vars + added_senate_vars, "SENATE_UNWEIGHTED_MODULARITY", is_print)
+print("\n\n\n================================================================\n\n\n")
+OLS_regressions("house_modularity_NO_minorities,UNFILTERED", y1, y2, ind_vars, "HOUSE_MODULARITY", is_print)
+OLS_regressions("house_modularity_minorities,UNFILTERED", y1, y2, ind_vars + added_house_vars, "HOUSE_MODULARITY", is_print)
+print("-------------------------------------------------------------------")
+OLS_regressions("senate_modularity_NO_minorities,UNFILTERED", y1, y2, ind_vars, "SENATE_MODULARITY", is_print)
+OLS_regressions("senate_modularity_minorities,UNFILTERED", y1, y2, ind_vars + added_senate_vars, "SENATE_MODULARITY", is_print)
                              
 # send_to_latex("tea", "Pear", "legislative_productivity\stat_correlations.csv", "legislative_productivity\stat_correlations.tex")

@@ -11,3 +11,5 @@ xmltodict-1.0.4/
 xmltodict.py
 .venv/
 __pycache__/
+temp_ethnicities.txt
+temp_parties.txt

@@ -11,6 +11,7 @@ import datetime
 import re
 import pandas as pd
 import numpy as np
+import math
 
 # Data source: https://projects.propublica.org/datastore/#congressional-data-bulk-legislation-bills
 
@@ -92,6 +93,65 @@ class Congress:
                 if bioguides not in list(self.graph.nodes()):
                     self.graph.add_nodes_from([(bioguides, details)])
         return bioguides
+
+    def compare_minority_white_legislators(self):
+        found_legs = 0
+        total_legs = 0
+        similarity_dict = {}
+        vertex_list = self.filtered.nodes.data()
+        for v1 in vertex_list:
+            name = v1[0]
+            data = v1[1]
+            if data['is_white'] == False:
+                total_legs += 1
+                leg = self.find_most_similar_white_legislator(name)
+                if leg != None:
+                    found_legs += 1
+                    similarity_dict[name] = leg[0]
+        print("Similarity statistics:", found_legs, total_legs, found_legs/total_legs)
+        return similarity_dict
+
+
+    def find_most_similar_white_legislator(self, minority):
+        vertex_list = self.filtered.nodes.data()
+        similarities = []
+        for v1 in vertex_list:
+            name = v1[0]
+            data = v1[1]
+            if data['is_white'] == True:
+                similarity = self.get_cosine_similarity(minority, name)
+                if similarity != None:
+                    similarities.append((name, data, similarity))
+        if similarities == [] or similarities == None:
+            return None
+        leg = max(similarities, key = lambda i: i[2])
+        return leg
+
+
+    def get_cosine_similarity(self, v0, v1):
+        v0_data = self.filtered.nodes[v0]
+        v1_data = self.filtered.nodes[v1]
+        v0_length = 0
+        v1_length = 0
+        v0_v1_dot = 0
+
+        vector_elements = ['votepct', 'dwnom1', 'dwnom2', 'seniority']
+        factor = {'votepct': 0.01, 'dwnom1': 1, 'dwnom2': 1, 'seniority': 0.02}
+        for k in vector_elements:
+            if k not in v0_data.keys() or k not in v1_data.keys():
+                return None
+
+        for k in vector_elements:
+            v0_k = v0_data[k]*factor[k]
+            v1_k = v1_data[k]*factor[k]
+            v0_v1_dot += v0_k*v1_k
+            v0_length += (v0_k)**2
+            v1_length += (v1_k)**2
+        v0_length = math.sqrt(v0_length)
+        v1_length = math.sqrt(v1_length)
+
+        return float((v0_v1_dot)/(v0_length*v1_length))
+            
 
     def get_bills(self, dump=False, save_graph=False):
         t0 = time.time()
@@ -292,12 +352,107 @@ class Congress:
 
         nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
 
+    def add_house_district_info(self, bill_type, details_table):
+        t0 = time.time()
+
+        vertex_list = self.filtered.nodes.data()
+        votepct_dict = {}
+        dwnom1_dict = {}
+        dwnom2_dict = {}
+        seniority_dict = {}
+        gender_dict = {}
+        age_dict = {}
+
+        format = '%Y-%m-%d'
+        y1 = 2*self.number + 1787
+        y2 = y1 + 2
+        congress_start = datetime.datetime.strptime(str(y1) + '-01-03', format)
+        congress_end = datetime.datetime.strptime(str(y2) + '-01-03', format)
+
+        for v in vertex_list:
+            person_details = v[1]
+            for i in range(len(details_table)):
+                if details_table['bioguide'][i] == v[0] or ('icpsr' in person_details.keys() and details_table['icpsr'][i] == person_details['icpsr']):
+                    gender = details_table['gender_foster'][i]
+                    if gender == gender:
+                        gender_dict[v[0]] = gender
+                    dwnom1 = details_table['dwnom1'][i]
+                    if dwnom1 == dwnom1:
+                        dwnom1_dict[v[0]] = dwnom1
+                    dwnom2 = details_table['dwnom2'][i]
+                    if dwnom2 == dwnom2:
+                        dwnom2_dict[v[0]] = dwnom2
+
+                    term_start = datetime.datetime.strptime(details_table['start'][i], format)
+                    term_end = datetime.datetime.strptime(details_table['end'][i], format)
+                    if (term_end <= congress_end and term_end >= congress_start) or (term_end > congress_end and term_start <= congress_end):
+                        seniority = details_table['seniority'][i]
+                        if seniority == seniority:
+                            seniority_dict[v[0]] = seniority
+                        age = details_table['age'][i]
+                        if age == age:
+                            age_dict[v[0]] = age
+                        votepct = details_table['votepct'][i]
+                        if votepct == votepct:
+                            votepct_dict[v[0]] = votepct
+
+        # print(votepct_dict)
+        # print("======")
+        # print(seniority_dict)
+        # print("=====")
+        # print(gender_dict)
+        
+        nx.set_node_attributes(self.filtered, votepct_dict, "votepct")
+        nx.set_node_attributes(self.filtered, dwnom1_dict, "dwnom1")
+        nx.set_node_attributes(self.filtered, dwnom2_dict, "dwnom2")
+        nx.set_node_attributes(self.filtered, seniority_dict, "seniority")
+        nx.set_node_attributes(self.filtered, gender_dict, "gender")
+        nx.set_node_attributes(self.filtered, age_dict, "age")
+
+        nx.write_graphml_lxml(self.filtered, self.savepath + str(bill_type) + "_filtered.graphml")
+
+        t1 = time.time()
+        print("House district info:", t1 - t0, "s")
+
+    def add_house_parties_manually(self, bill_type):
+        party_dict = {}
+        vertex_list = self.filtered.nodes.data()
+        for v in vertex_list:
+            person_details = v[1]
+            if 'name' in person_details.keys():
+                full_name = person_details['name']
+            else:
+                full_name = person_details['fullName'][5:].split(" [")[0]
+            if 'party' not in person_details.keys():
+                found = False
+                with open("temp_parties.txt", mode="r") as f:
+                    new_parties = f.readlines()
+                    for n in new_parties:
+                        q = n.replace("\n", "")
+                        if str(v[0]) in q:
+                            q = q.split(",")
+                            party = q[1]
+                            party_dict[v[0]] = p
+                            found = True
+                if not found:
+                    p = input(full_name + ' party: ')
+                    party_dict[v[0]] = p
+                    with open("temp_ethnicities.txt", mode="a") as f:
+                        f.write(str(v[0]) + "," + p + "\n")
+
+        nx.set_node_attributes(self.graph, party_dict, "party")
+        nx.set_node_attributes(self.filtered, party_dict, "party")
+        nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
+        nx.write_graphml_lxml(self.filtered, self.savepath + str(bill_type) + "_filtered.graphml")
+        
+
     def add_house_predicted_ethnicities(self, bill_type, ethnicity_table):
         t0 = time.time()
         vertex_list = self.graph.nodes.data()
 
         is_white_dict = {}
         ethnicity_dict = {}
+        to_input_manually = []
         
         c = 0
         for v in vertex_list:
@@ -306,43 +461,93 @@ class Congress:
                 full_name = person_details['name']
             else:
                 full_name = person_details['fullName'][5:].split(" [")[0]
-            stop = False
+            # print(full_name)
+            ethnicity_found = False
+            is_no_info = True
             for i in range(len(ethnicity_table)):
                 if ethnicity_table['bioguide'][i] == v[0] or ('icpsr' in person_details.keys() and ethnicity_table['icpsr'][i] == person_details['icpsr']):
-                    non_white = ethnicity_table['non_white'][i]
-                    is_white = None
-                    if non_white != non_white or non_white == np.float64(0.0):
-                        is_white = True
-                    elif non_white == np.float64(1.0):
-                        is_white = False
-                    is_white_dict[v[0]] = is_white
-
-                    ethnicity = "White"
+                    # print(full_name, "found")
+                    ind_to_put = i
                     black = ethnicity_table['afam'][i]
                     latino = ethnicity_table['latino'][i]
                     asian = ethnicity_table['asian'][i]
+                    ethnicity = ""
+                    non_white = ethnicity_table['non_white'][i]
+
+                    # print(full_name, black, latino, asian, non_white)
+                    if black == black or latino == latino or asian == asian or non_white == non_white:
+                        is_no_info = False
 
                     if black == np.float64(1.0):
                         ethnicity = "African American"
-                        stop = True
+                        ethnicity_found = True
                     if latino == np.float64(1.0):
                         ethnicity = "Latino"
-                        stop = True
+                        ethnicity_found = True
                     if asian == np.float64(1.0):
                         ethnicity = "Asian"
-                        stop = True
-                    ethnicity_dict[v[0]] = ethnicity   
-                    # print(c, full_name, ethnicity, is_white)
-                    if stop:
+                        ethnicity_found = True
+
+                    if ethnicity_found:
+                        ethnicity_dict[v[0]] = ethnicity
+                        is_white_dict[v[0]] = False
+                        # print(ethnicity)
                         break
-            c += 1     
+
+                    if non_white == np.float64(0.0):
+                        ethnicity_dict[v[0]] = "White"
+                        is_white_dict[v[0]] = True
+                        ethnicity_found = True
+                        # print("White")
+                        break
+                    elif non_white == np.float64(1.0):
+                        is_white_dict[v[0]] = False
+                        ethnicity_found = True
+                        break
+
+            if not is_no_info and not ethnicity_found:
+                ethnicity_dict[v[0]] = "White"
+                is_white_dict[v[0]] = True
+                ethnicity_found = True
+                # print("White")
+
+            if not ethnicity_found:
+                with open("temp_ethnicities.txt", mode="r") as f:
+                    new_ethnicities = f.readlines()
+                    for n in new_ethnicities:
+                        q = n.replace("\n", "")
+                        if str(v[0]) in q:
+                            q = q.split(",")
+                            ethnicity = q[1]
+                            ethnicity_dict[v[0]] = ethnicity
+                            is_white_dict[v[0]] = (ethnicity == 'White')
+                            ethnicity_found = True
+                            # print(ethnicity)
+
+            if not ethnicity_found:
+                # print("No details in congress", self.number, ":", full_name, v[0])
+                to_input_manually.append((v[0], full_name))
+
+            c += 1
         t1 = time.time()
-        print("House ethnicities:", t1 - t0, "s")
+        
+        for v in to_input_manually:
+            ethnicity = input(v[1] + " ethnicity = ")
+            ethnicity_dict[v[0]] = ethnicity
+            is_white_dict[v[0]] = (ethnicity == 'White')
+            with open("temp_ethnicities.txt", mode="a") as f:
+                f.write(str(v[0]) + "," + ethnicity + "\n")
+        
 
         nx.set_node_attributes(self.graph, is_white_dict, "is_white")
-        nx.set_node_attributes(self.graph, ethnicity_dict, "ethnicity")      
+        nx.set_node_attributes(self.graph, ethnicity_dict, "ethnicity")     
+        nx.set_node_attributes(self.filtered, is_white_dict, "is_white")
+        nx.set_node_attributes(self.filtered, ethnicity_dict, "ethnicity")    
 
         nx.write_graphml_lxml(self.graph, self.savepath + str(bill_type) + ".graphml")
+        nx.write_graphml_lxml(self.filtered, self.savepath + str(bill_type) + "_filtered.graphml")
+        print("House ethnicities:", t1 - t0, "s")
+
 
     def update_bill_edges(self, chamber, save_graph):
         attrs = {}
@@ -612,6 +817,7 @@ def rebuild_base_graphs(congress_num, ET,  to_verify):
             individual_congress.verify_congresspeople(b, G.nodes.data())
             if b == 'house':
                 individual_congress.add_house_predicted_ethnicities(b, ET)
+                individual_congress.add_house_district_info(b, ET)
 
         else:
             individual_congress.build_graph_from_adjlist(b)
